@@ -5,12 +5,19 @@ Install instructions:
 
 
 Setting up the bot in discord developer portal: https://www.youtube.com/watch?v=hoDLj0IzZMU&t=1s watch from 1:30 to 4:10
+(Used to get your TOKEN variable, you need this to let the bot log into discord (explained in the video)
 
 **Usage instructions:**
-- In short: Download all 3 files
-- Put in keys
-- Run the files in an editor (Like PyCharm community edition)
-- Enjoy the bot!
+In short: 
+- **Download all 3 files**
+- **Put in keys**
+- **Install neccessary dependecies:** pip install discord.py
+pip install youtube_dl
+pip install spotipy
+pip install requests
+pip install beautifulsoup4
+- **Run the files in an editor (Like PyCharm community edition)**
+- **Enjoy the bot!**
 
 **Code explanation**
 
