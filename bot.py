@@ -10,7 +10,6 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import requests
 from config import TOKEN, GENIUS_ACCESS_TOKEN
-import responses
 from bs4 import BeautifulSoup
 
 
