@@ -9,7 +9,8 @@ import youtube_dl
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import requests
-from config import TOKEN, GENIUS_ACCESS_TOKEN
+from config import TOKEN, GENIUS_ACCESS_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
+import responses
 from bs4 import BeautifulSoup
 
 
@@ -34,8 +35,8 @@ class MusicPlayer:
             'socket_timeout': 15,
         })
         self.sp = spotipy.Spotify(client_credentials_manager=SpotifyClientCredentials(
-            client_id='4c1dde34a611451a8e752ae69a09f3d7',
-            client_secret='beab49dce2154a468862bdf1823d0cb6'
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET
         ))
         self.conn = sqlite3.connect('audio_cache.db')  # Connect to the SQLite database
         self.cursor = self.conn.cursor()
