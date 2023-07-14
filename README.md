@@ -37,14 +37,6 @@ pip install spotipy
 pip install requests
 pip install beautifulsoup4
 
-**Usage**
-
-To use the Music Player, you need to follow these steps:
-
-    Create an instance of the MusicPlayer class.
-    Call the start() method on the player instance.
-    The player will connect to Discord using the provided bot token (TOKEN) and start listening for commands.
-
 **Available Commands**
 
 The Music Player supports the following commands when used in a Discord server where the bot is present:
