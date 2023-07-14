@@ -3,6 +3,7 @@ Music Player README
 
 Install instructions:
 
+[![Watch the video](https://img.youtube.com/vi/ifglzdPB1sY/maxresdefault.jpg)](https://youtu.be/ifglzdPB1sY)
 
 Setting up the bot in discord developer portal: https://www.youtube.com/watch?v=hoDLj0IzZMU&t=1s watch from 1:30 to 4:10
 (Used to get your TOKEN variable, you need this to let the bot log into discord (explained in the video)
