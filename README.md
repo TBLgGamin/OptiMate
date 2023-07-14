@@ -1,7 +1,20 @@
+
 Music Player README
 
+Install instructions:
+
+
+Usage instructions:
+
+Setting up the bot in discord developer portal: https://www.youtube.com/watch?v=hoDLj0IzZMU&t=1s watch from 1:30 to 4:10
+
+
+
+**Code explanation**
+
 This code represents a MusicPlayer class that allows you to play audio in a voice channel on Discord. The player supports playing audio from various sources, such as YouTube and Spotify, and includes features like queuing songs, pausing and resuming playback, displaying the currently playing song, fetching lyrics, and more.
-Requirements
+
+**Requirements**
 
 To run this code, you need to have the following dependencies installed:
 
@@ -16,7 +29,15 @@ To run this code, you need to have the following dependencies installed:
     requests: a library for making HTTP requests to external APIs.
     bs4 (Beautiful Soup): a library for parsing HTML and XML documents.
 
-Usage
+**You can install these dependencies using the following pip installs**
+
+pip install discord.py
+pip install youtube_dl
+pip install spotipy
+pip install requests
+pip install beautifulsoup4
+
+**Usage**
 
 To use the Music Player, you need to follow these steps:
 
@@ -24,7 +45,7 @@ To use the Music Player, you need to follow these steps:
     Call the start() method on the player instance.
     The player will connect to Discord using the provided bot token (TOKEN) and start listening for commands.
 
-Available Commands
+**Available Commands**
 
 The Music Player supports the following commands when used in a Discord server where the bot is present:
 
@@ -41,10 +62,7 @@ The Music Player supports the following commands when used in a Discord server w
     !loop stop: Disables looping of the current song.
     !lyrics: Fetches and displays the lyrics of the currently playing song.
 
-Configuration
-
-Before running the code, you need to provide your Discord bot token (TOKEN) and a Genius API access token (GENIUS_ACCESS_TOKEN) in the config.py file. Additionally, you may need to adjust the Spotify client ID and client secret values used for authentication with the Spotify Web API.
-Notes
+**Notes**
 
     The code uses asyncio to handle asynchronous operations, allowing the bot to handle multiple commands concurrently.
     The sqlite3 module is used to store audio URLs in a SQLite database for caching purposes.
