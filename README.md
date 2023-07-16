@@ -12,7 +12,7 @@ Setting up the bot in discord developer portal: https://www.youtube.com/watch?v=
 
 **Usage instructions:**
 In short: 
-- **Download all 3 files**
+- **Download all 4 files**
 - **Put in keys**
 - **Install neccessary dependecies:** pip install discord.py
 pip install youtube_dl
@@ -20,6 +20,7 @@ pip install spotipy
 pip install requests
 pip install beautifulsoup4
 - **Run the files in an editor (Like PyCharm community edition)**
+- **(optional) edit the bots non-music respones in the responses file**
 - **Enjoy the bot!**
 
 **Code explanation**
