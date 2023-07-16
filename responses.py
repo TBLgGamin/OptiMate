@@ -2,15 +2,19 @@
 import discord
 
 def get_response(message: discord.Message, user_message: str) -> str:
+    # Convert the user message to lowercase for case-insensitive matching
     p_message = user_message.lower()
 
     if p_message == '!hello':
+        # Respond with a greeting if the user message is '!hello'
         return 'Hey there! How can I assist you?'
 
     if not p_message.startswith('!'):
-        return ''  # Empty response if message doesn't start with "!"
+        # Empty response if the message doesn't start with "!"
+        return ''
 
     if p_message == '!helpme':
+# Respond with a help message if the user message is '!helpme'
         return '''**🤖 OptiMate Bot Commands**
 
     OptiMate is a Discord bot that can play music, recommend games, and more. Here are the commands you can use:
@@ -40,6 +44,8 @@ def get_response(message: discord.Message, user_message: str) -> str:
 
     # Check if the message should be handled by bot.py
     if p_message.startswith('!music') or p_message == '!stop' or p_message.startswith('!force') or p_message.startswith('!local') or p_message == '!q' or p_message == '!qnext' or p_message == '!pause' or p_message == '!resume' or p_message == '!np' or p_message == '!reset' or p_message == '!loop' or p_message == '!loop stop' or p_message == '!lyrics':
+        # No response required for certain specific commands
         return ''
 
-    return 'Unknown command :/\n\nTry typing: !helpme to get some help'
+    # Respond with an unknown command message if none of the conditions above match
+    return 'Unknown command :/\n\nTry typing: !helpme to get some help''
