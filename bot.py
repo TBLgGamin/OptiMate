@@ -13,17 +13,19 @@ from config import TOKEN, GENIUS_ACCESS_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT
 import responses
 from bs4 import BeautifulSoup
 
-
+# Create a class to represent the music player
 class MusicPlayer:
+    # Define FFMPEG options as a class constant
     FFMPEG_OPTIONS = {
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
         'options': '-vn -af dynaudnorm'
     }
 
     def __init__(self):
+        # Initialize instance variables
         self.voice_channel = None
         self.current_audio = None
-        self.queue = []  # Add a queue
+        self.queue = []  # Add a queue to store songs
         self.audio_cache = {}  # Create a cache for audio URLs
         self.ydl = youtube_dl.YoutubeDL({
             'format': 'bestaudio[abr<=96]/bestaudio/best',
@@ -41,7 +43,7 @@ class MusicPlayer:
         self.conn = sqlite3.connect('audio_cache.db')  # Connect to the SQLite database
         self.cursor = self.conn.cursor()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS audio_cache
-                                      (link_or_file_path text, audio_url text)''')  # Create the table if not exist
+                                      (link_or_file_path text, audio_url text)''')  # Create the table if it doesn't exist
         self.loop = False  # Add loop state
 
     def __del__(self):
@@ -49,13 +51,16 @@ class MusicPlayer:
 
     async def play_audio(self, link_or_file_path: str):
         try:
+            # Check if audio URL is already in the cache
             self.cursor.execute("SELECT audio_url FROM audio_cache WHERE link_or_file_path = ?",
                                 (link_or_file_path,))
             result = self.cursor.fetchone()
-            if result is None:  # Check if audio URL is not in cache
+            if result is None:
+                # If audio URL is not in cache, fetch it and store it in the cache
                 if link_or_file_path.startswith('https://open.spotify.com/track/'):
                     song_name = await self.get_spotify_track_name(link_or_file_path)
                     if song_name:
+                        # Search for the song on YouTube and extract the audio URL
                         search_query = urllib.parse.urlencode({'search_query': song_name})
                         htm_content = urllib.request.urlopen('http://www.youtube.com/results?' + search_query)
                         search_results = re.findall(r"watch\?v=(\S{11})", htm_content.read().decode())
@@ -65,6 +70,7 @@ class MusicPlayer:
                     else:
                         audio_url = None
                 elif link_or_file_path.startswith('https://open.spotify.com/playlist/'):
+                    # Get all track URLs from a Spotify playlist and add them to the queue
                     track_urls = await self.get_spotify_playlist_tracks(link_or_file_path)
                     if track_urls:
                         self.queue.extend(track_urls)  # Add all tracks from the playlist to the queue
@@ -72,10 +78,12 @@ class MusicPlayer:
                     else:
                         audio_url = None
                 elif link_or_file_path.startswith('https://www.youtube.com/watch?v='):
+                    # Extract the audio URL directly from a YouTube video URL
                     url = link_or_file_path.split('&')[0]  # Only take the part of the URL before the first '&'
                     info_dict = self.ydl.extract_info(url, download=False)
                     audio_url = info_dict['url']
                 else:
+                    # Search for the song on YouTube and extract the audio URL
                     query_string = urllib.parse.urlencode({'search_query': link_or_file_path})
                     htm_content = urllib.request.urlopen('http://www.youtube.com/results?' + query_string)
                     search_results = re.findall(r"watch\?v=(\S{11})", htm_content.read().decode())
@@ -89,11 +97,12 @@ class MusicPlayer:
                 audio_url = result[0]  # Get audio URL from cache
 
             if audio_url is not None:
+                # Play the audio using FFmpeg
                 self.voice_channel.play(discord.FFmpegPCMAudio(audio_url, **self.FFMPEG_OPTIONS))
                 self.current_audio = link_or_file_path
                 await self.wait_for_audio_finish()  # Wait for the audio to finish playing
             else:
-                await self.play_next_song()  # Try to play the next song in the queue if fail
+                await self.play_next_song()  # Try to play the next song in the queue if fetching the audio fails
         except Exception as e:
             print(f"Error playing audio: {e}")
 
@@ -108,7 +117,7 @@ class MusicPlayer:
 
     async def play_next_song(self):
         if self.queue:
-            next_song = self.queue.pop(0)  # Get the next song
+            next_song = self.queue.pop(0)  # Get the next song from the queue
             await self.play_audio(next_song)
 
     async def send_message(self, message: discord.Message, response: str, is_private: bool):
@@ -207,6 +216,7 @@ class MusicPlayer:
             return info_dict.get('title', None)
 
     async def start(self):
+        # Initialize the Discord client with intents
         intents = discord.Intents.default()
         intents.message_content = True
         intents.voice_states = True  # Enable voice state intent
@@ -266,7 +276,6 @@ class MusicPlayer:
                     self.queue.clear()  # Clear the queue
                     self.current_audio = None  # Reset current_audio
                     await self.disconnect_voice_channel()  # Disconnect from the voice channel
-
 
             elif user_message == '!Qnext':
                 if self.queue and self.voice_channel:
@@ -394,4 +403,3 @@ if __name__ == "__main__":
     player = MusicPlayer()
     asyncio.create_task(player.start())
     asyncio.get_event_loop().run_forever()
-
