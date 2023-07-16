@@ -10,9 +10,9 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import requests
 from config import TOKEN, GENIUS_ACCESS_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
-import responses
 from bs4 import BeautifulSoup
 import aiohttp
+import responses
 
 
 class MusicPlayer:
