@@ -20,6 +20,7 @@ pip install spotipy
 pip install requests
 pip install beautifulsoup4
 pip install lyricsgenius
+pip install langdetect
 - **Run the files in an editor (Like PyCharm community edition)**
 - **(optional) edit the bots non-music respones in the responses file**
 - **Enjoy the bot!**
@@ -51,6 +52,7 @@ pip install spotipy
 pip install requests
 pip install beautifulsoup4
 pip install lyricsgenius
+pip install langdetect
 
 **Available Commands**
 
