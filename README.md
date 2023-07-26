@@ -19,6 +19,7 @@ pip install youtube_dl
 pip install spotipy
 pip install requests
 pip install beautifulsoup4
+pip install lyricsgenius
 - **Run the files in an editor (Like PyCharm community edition)**
 - **(optional) edit the bots non-music respones in the responses file**
 - **Enjoy the bot!**
@@ -49,6 +50,7 @@ pip install youtube_dl
 pip install spotipy
 pip install requests
 pip install beautifulsoup4
+pip install lyricsgenius
 
 **Available Commands**
 
