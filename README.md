@@ -13,7 +13,7 @@ Setting up the bot in discord developer portal: https://www.youtube.com/watch?v=
 **Usage instructions:**
 In short: 
 - **Download all 4 files**
--**Create discord bot in discord developers portal**
+- **Create discord bot in discord developers portal**
 - **Put in keys**
 - **Install neccessary dependecies:** pip install discord.py
 pip install youtube_dl
