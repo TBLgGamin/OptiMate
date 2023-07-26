@@ -3,35 +3,36 @@ import sqlite3
 import urllib.parse
 import urllib.request
 import re
-from typing import Optional
 import discord
 import youtube_dl
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
-import requests
 from config import TOKEN, GENIUS_ACCESS_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
-from bs4 import BeautifulSoup
 import aiohttp
 import responses
-
+import time
+import lyricsgenius
+from typing import Tuple, Optional
 
 class MusicPlayer:
     FFMPEG_OPTIONS = {
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
         'options': '-vn -af dynaudnorm'
     }
+    COOLDOWN_TIME = 3  # Cooldown time in seconds
 
     def __init__(self):
         self.voice_channel = None
         self.current_audio = None
         self.queue = []
         self.audio_cache = {}
+        self.command_timestamps = {}  # Stores the timestamp of the last command issued by each user
         self.ydl = youtube_dl.YoutubeDL({
             'format': 'bestaudio[abr<=96]/bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'Opus',
-                'preferredquality': '96',
+                'preferredquality': '192',
             }],
             'socket_timeout': 30,
         })
@@ -48,12 +49,20 @@ class MusicPlayer:
 
     async def connect_to_database(self):
         self.conn = sqlite3.connect('audio_cache.db')
+        cursor = self.conn.cursor()
+        cursor.execute("""
+                   CREATE TABLE IF NOT EXISTS audio_cache (
+                       link_or_file_path TEXT PRIMARY KEY,
+                       audio_url TEXT
+                   )
+               """)
+        self.conn.commit()
 
     async def disconnect_from_database(self):
         if self.conn:
             self.conn.close()
 
-    async def play_audio(self, link_or_file_path: str):
+    async def play_audio(self, link_or_file_path: str, retries: int = 3):
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT audio_url FROM audio_cache WHERE link_or_file_path = ?",
@@ -71,8 +80,13 @@ class MusicPlayer:
                         url = 'http://www.youtube.com/watch?v=' + search_results[0]
                         info_dict = self.ydl.extract_info(url, download=False)
                         audio_url = info_dict['url']
+                        cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                                       (url, audio_url))  # Store the YouTube URL in the cache
                     else:
                         audio_url = None
+                    cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                                   (link_or_file_path, audio_url))  # Store the original Spotify URL in the cache
+                    self.conn.commit()
                 elif link_or_file_path.startswith('https://open.spotify.com/playlist/'):
                     track_urls = await self.get_spotify_playlist_tracks(link_or_file_path)
                     if track_urls:
@@ -84,6 +98,9 @@ class MusicPlayer:
                     url = link_or_file_path.split('&')[0]
                     info_dict = self.ydl.extract_info(url, download=False)
                     audio_url = info_dict['url']
+                    cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                                   (link_or_file_path, audio_url))
+                    self.conn.commit()
                 else:
                     query_string = urllib.parse.urlencode({'search_query': link_or_file_path})
                     async with aiohttp.ClientSession() as session:
@@ -93,9 +110,9 @@ class MusicPlayer:
                     url = 'http://www.youtube.com/watch?v=' + search_results[0]
                     info_dict = self.ydl.extract_info(url, download=False)
                     audio_url = info_dict['url']
-                cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
-                               (link_or_file_path, audio_url))
-                self.conn.commit()
+                    cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                                   (link_or_file_path, audio_url))
+                    self.conn.commit()
             else:
                 audio_url = result[0]
 
@@ -107,7 +124,12 @@ class MusicPlayer:
                 await self.play_next_song()
         except Exception as e:
             print(f"Error playing audio: {e}")
-            await self.play_next_song()  # Skip to the next song in case of an error
+            if retries > 0:
+                print(f"Retrying... ({retries} retries left)")
+                await self.play_audio(link_or_file_path, retries - 1)
+            else:
+                print("Failed after 3 retries, skipping to the next song.")
+                await self.play_next_song()  # Skip to the next song in case of
 
     async def wait_for_audio_finish(self):
         if self.voice_channel and (self.voice_channel.is_playing() or self.voice_channel.is_paused()):
@@ -181,41 +203,35 @@ class MusicPlayer:
                 track_urls.append(track['track']['external_urls']['spotify'])
         return track_urls
 
+    def clean_lyrics(self, lyrics: str) -> str:
+        lines = lyrics.split('\n')
+        cleaned_lines = [line for line in lines if
+                         not line.startswith(
+                             '[') and 'Embed' not in line and 'You might also like' not in line and 'Contributors' not in line and 'Translations' not in line and not line.endswith(
+                             'Lyrics')]
+        return '\n'.join(cleaned_lines)
+
+    def extract_artist_and_song_from_title(self, title: str) -> Tuple[Optional[str], Optional[str]]:
+        parts = title.split(' - ', 1)
+        if len(parts) == 2:
+            artist, song = parts
+            # Remove extra information after the first '|' character
+            song = re.sub(r"\|.*", "", song)
+            return artist.strip(), song.strip()
+        else:
+            return None, None
+
     async def fetch_lyrics_from_genius(self, song_name: str) -> Optional[str]:
-        headers = {
-            'Authorization': f'Bearer {GENIUS_ACCESS_TOKEN}',
-            'Content-Type': 'application/json',
-        }
-        simplified_song_name = re.sub(r'\(.*\)', '', song_name)
-        simplified_song_name = simplified_song_name.strip()
-        params = {
-            'q': simplified_song_name,
-        }
-        response = requests.get('https://api.genius.com/search', headers=headers, params=params)
-        search_data = response.json()
-
-        if 'hits' in search_data['response']:
-            hits = search_data['response']['hits']
-            if hits:
-                song_id = hits[0]['result']['id']
-                url = f'https://api.genius.com/songs/{song_id}'
-                response = requests.get(url, headers=headers)
-                song_data = response.json()
-
-                if 'song' in song_data['response']:
-                    song = song_data['response']['song']
-                    song_title = song['full_title']
-                    if 'lyrics_state' in song and song['lyrics_state'] == 'complete':
-                        lyrics_url = song['url']
-                        lyrics_response = requests.get(lyrics_url)
-
-                        soup = BeautifulSoup(lyrics_response.text, 'html.parser')
-                        lyrics_div = soup.find('div', class_='Lyrics__Container-sc-1ynbvzw-5 Dzxov')
-                        if lyrics_div is not None:
-                            lyrics = lyrics_div.get_text(separator="\n").strip()
-                            return f"{song_title}\n\n{lyrics}"
-                        else:
-                            return None
+        genius = lyricsgenius.Genius(GENIUS_ACCESS_TOKEN)
+        artist, title = self.extract_artist_and_song_from_title(song_name)
+        if artist and title:
+            song = genius.search_song(title, artist)
+        else:
+            song = genius.search_song(song_name)
+        if song:
+            return self.clean_lyrics(song.lyrics)
+        else:
+            return None
 
     async def get_youtube_video_title(self, url: str) -> str:
         ydl_opts = {'quiet': True}
@@ -266,6 +282,17 @@ class MusicPlayer:
 
             print(f'{username} said: "{user_message}" ({channel})')
 
+            # Check if the user has issued a command within the last few seconds
+            current_time = time.time()
+            if username in self.command_timestamps and current_time - self.command_timestamps[
+                username] < self.COOLDOWN_TIME:
+                response = 'You are issuing commands too quickly. Please wait a few seconds before issuing another command.'
+                await self.send_message(message, response, is_private=False)
+                return
+
+            # Update the timestamp of the last command for this user
+            self.command_timestamps[username] = current_time
+
             response = responses.get_response(message, user_message)
             await self.send_message(message, response, is_private=False)
 
@@ -291,9 +318,10 @@ class MusicPlayer:
                 song_link = user_message.split(' ', 1)[1].strip() if len(user_message.split(' ', 1)) > 1 else None
 
                 if song_link and self.voice_channel:
+                    self.queue.clear()  # Clear the queue
                     self.voice_channel.stop()
                     await self.play_audio(song_link)
-                    response = 'Playing the next song!'
+                    response = 'Playing the requested song!'
                 else:
                     response = 'Please provide a song link or join a voice channel!'
 
@@ -403,6 +431,19 @@ class MusicPlayer:
                 else:
                     response = 'No song is currently playing.'
                     await self.send_message(message, response, is_private=False)
+
+            elif user_message.startswith('!cc'):
+                if self.voice_channel:
+                    self.voice_channel.stop()
+                    self.queue.clear()
+                    self.current_audio = None
+                    cursor = self.conn.cursor()
+                    cursor.execute("DELETE FROM audio_cache")
+                    self.conn.commit()
+                    response = 'Cleared the audio cache and stopped playing.'
+                else:
+                    response = 'I am not in a voice channel!'
+                await self.send_message(message, response, is_private=False)
 
         @client.event
         async def on_voice_state_update(member, before, after):
