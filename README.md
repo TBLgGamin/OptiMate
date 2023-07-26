@@ -33,16 +33,22 @@ This code represents a MusicPlayer class that allows you to play audio in a voic
 
 To run this code, you need to have the following dependencies installed:
 
-    asyncio: a library for writing asynchronous code using coroutines.
-    sqlite3: a lightweight database engine for storing audio URLs in a cache.
-    urllib: a module for handling URLs and making HTTP requests.
-    re: a module for regular expressions, used for parsing URLs and extracting information.
-    typing: a module for type hints and annotations.
-    discord: a library for creating Discord bots.
-    youtube_dl: a library for downloading YouTube videos and extracting audio URLs.
-    spotipy: a library for interacting with the Spotify Web API.
-    requests: a library for making HTTP requests to external APIs.
-    bs4 (Beautiful Soup): a library for parsing HTML and XML documents.
+   Here's the updated list:
+
+- `asyncio`: a library for writing asynchronous code using coroutines.
+- `sqlite3`: a lightweight database engine for storing audio URLs in a cache.
+- `urllib.parse` and `urllib.request`: modules for handling URLs and making HTTP requests.
+- `re`: a module for regular expressions, used for parsing URLs and extracting information.
+- `discord`: a library for creating Discord bots.
+- `youtube_dl`: a library for downloading YouTube videos and extracting audio URLs.
+- `spotipy` and `spotipy.oauth2.SpotifyClientCredentials`: libraries for interacting with the Spotify Web API.
+- `config`: a module for managing configuration variables like tokens and secrets.
+- `aiohttp`: a library for making HTTP requests in an asynchronous way.
+- `responses`: a library for creating mock responses to HTTP requests (used for testing).
+- `time`: a module for handling time-related functions.
+- `lyricsgenius`: a library for interacting with the Genius API to fetch song lyrics.
+- `typing` and `typing.Tuple`, `typing.Optional`: modules for type hints and annotations.
+- `langdetect`: a library for detecting the language of a given text.
 
 **You can install these dependencies using the following pip installs**
 
