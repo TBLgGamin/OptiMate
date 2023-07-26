@@ -13,6 +13,7 @@ import responses
 import time
 import lyricsgenius
 from typing import Tuple, Optional
+from langdetect import detect
 
 class MusicPlayer:
     FFMPEG_OPTIONS = {
@@ -229,9 +230,10 @@ class MusicPlayer:
         else:
             song = genius.search_song(song_name)
         if song:
-            return self.clean_lyrics(song.lyrics)
-        else:
-            return None
+            lyrics = self.clean_lyrics(song.lyrics)
+            if detect(lyrics) == 'en':  # Only return the lyrics if they are in English
+                return lyrics
+        return None
 
     async def get_youtube_video_title(self, url: str) -> str:
         ydl_opts = {'quiet': True}
