@@ -43,8 +43,7 @@ def get_response(message: discord.Message, user_message: str) -> str:
     '''
 
     # Check if the message should be handled by bot.py
-    if p_message.startswith('!music') or p_message == '!stop' or p_message.startswith('!force') or p_message.startswith('!local') or p_message == '!q' or p_message == '!qnext' or p_message == '!pause' or p_message == '!resume' or p_message == '!np' or p_message == '!reset' or p_message == '!loop' or p_message == '!loop stop' or p_message == '!lyrics'or p_message == '!qforce':
-        # No response required for certain specific commands
+    if p_message.startswith('!music') or p_message == '!stop' or p_message.startswith('!force') or p_message.startswith('!local') or p_message == '!q' or p_message == '!qnext' or p_message == '!pause' or p_message == '!resume' or p_message == '!np' or p_message == '!reset' or p_message == '!loop' or p_message == '!loop stop' or p_message == '!lyrics' or p_message == '!cc' or p_message == '!qforce':
         return ''
 
     # Respond with an unknown command message if none of the conditions above match
