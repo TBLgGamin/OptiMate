@@ -4,7 +4,7 @@ import urllib.parse
 import urllib.request
 import re
 import discord
-import youtube_dl
+import yt_dlp
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from config import TOKEN, GENIUS_ACCESS_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
@@ -14,6 +14,7 @@ import time
 import lyricsgenius
 from typing import Tuple, Optional
 from langdetect import detect
+
 
 class MusicPlayer:
     FFMPEG_OPTIONS = {
@@ -28,7 +29,7 @@ class MusicPlayer:
         self.queue = []
         self.audio_cache = {}
         self.command_timestamps = {}  # Stores the timestamp of the last command issued by each user
-        self.ydl = youtube_dl.YoutubeDL({
+        self.ydl = yt_dlp.YoutubeDL({
             'format': 'bestaudio[abr<=96]/bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -70,50 +71,7 @@ class MusicPlayer:
                            (link_or_file_path,))
             result = cursor.fetchone()
             if result is None:
-                if link_or_file_path.startswith('https://open.spotify.com/track/'):
-                    song_name = await self.get_spotify_track_name(link_or_file_path)
-                    if song_name:
-                        search_query = urllib.parse.urlencode({'search_query': song_name})
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get('http://www.youtube.com/results?' + search_query) as response:
-                                htm_content = await response.read()
-                        search_results = re.findall(r"watch\?v=(\S{11})", htm_content.decode())
-                        url = 'http://www.youtube.com/watch?v=' + search_results[0]
-                        info_dict = self.ydl.extract_info(url, download=False)
-                        audio_url = info_dict['url']
-                        cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
-                                       (url, audio_url))  # Store the YouTube URL in the cache
-                    else:
-                        audio_url = None
-                    cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
-                                   (link_or_file_path, audio_url))  # Store the original Spotify URL in the cache
-                    self.conn.commit()
-                elif link_or_file_path.startswith('https://open.spotify.com/playlist/'):
-                    track_urls = await self.get_spotify_playlist_tracks(link_or_file_path)
-                    if track_urls:
-                        self.queue.extend(track_urls)
-                        audio_url = self.queue[0]
-                    else:
-                        audio_url = None
-                elif link_or_file_path.startswith('https://www.youtube.com/watch?v='):
-                    url = link_or_file_path.split('&')[0]
-                    info_dict = self.ydl.extract_info(url, download=False)
-                    audio_url = info_dict['url']
-                    cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
-                                   (link_or_file_path, audio_url))
-                    self.conn.commit()
-                else:
-                    query_string = urllib.parse.urlencode({'search_query': link_or_file_path})
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get('http://www.youtube.com/results?' + query_string) as response:
-                            htm_content = await response.read()
-                    search_results = re.findall(r"watch\?v=(\S{11})", htm_content.decode())
-                    url = 'http://www.youtube.com/watch?v=' + search_results[0]
-                    info_dict = self.ydl.extract_info(url, download=False)
-                    audio_url = info_dict['url']
-                    cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
-                                   (link_or_file_path, audio_url))
-                    self.conn.commit()
+                audio_url = await self.get_audio_url(link_or_file_path, cursor)
             else:
                 audio_url = result[0]
 
@@ -131,6 +89,69 @@ class MusicPlayer:
             else:
                 print("Failed after 3 retries, skipping to the next song.")
                 await self.play_next_song()  # Skip to the next song in case of
+
+    async def get_audio_url(self, link_or_file_path: str, cursor):
+        if link_or_file_path.startswith('https://open.spotify.com/track/'):
+            audio_url = await self.get_audio_url_from_spotify_track(link_or_file_path, cursor)
+        elif link_or_file_path.startswith('https://open.spotify.com/playlist/'):
+            audio_url = await self.get_audio_url_from_spotify_playlist(link_or_file_path)
+        elif link_or_file_path.startswith('https://www.youtube.com/watch?v='):
+            audio_url = await self.get_audio_url_from_youtube_video(link_or_file_path, cursor)
+        else:
+            audio_url = await self.get_audio_url_from_search(link_or_file_path, cursor)
+        return audio_url
+
+    async def get_audio_url_from_spotify_track(self, link_or_file_path: str, cursor):
+        song_name = await self.get_spotify_track_name(link_or_file_path)
+        if song_name:
+            search_query = urllib.parse.urlencode({'search_query': song_name})
+            async with aiohttp.ClientSession() as session:
+                async with session.get('http://www.youtube.com/results?' + search_query) as response:
+                    htm_content = await response.read()
+            search_results = re.findall(r"watch\?v=(\S{11})", htm_content.decode())
+            url = 'http://www.youtube.com/watch?v=' + search_results[0]
+            info_dict = self.ydl.extract_info(url, download=False)
+            audio_url = info_dict['url']
+            cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                           (url, audio_url))  # Store the YouTube URL in the cache
+        else:
+            audio_url = None
+        cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                       (link_or_file_path, audio_url))  # Store the original Spotify URL in the cache
+        self.conn.commit()
+        return audio_url
+
+    async def get_audio_url_from_spotify_playlist(self, link_or_file_path: str):
+        track_urls = await self.get_spotify_playlist_tracks(link_or_file_path)
+        if track_urls:
+            self.queue.extend(track_urls)
+            audio_url = self.queue[0]
+        else:
+            audio_url = None
+        return audio_url
+
+    async def get_audio_url_from_youtube_video(self, link_or_file_path: str, cursor):
+        url = link_or_file_path.split('&')[0]
+        info_dict = self.ydl.extract_info(url, download=False)
+        audio_url = info_dict['url']
+        cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                       (link_or_file_path, audio_url))
+        self.conn.commit()
+        return audio_url
+
+    async def get_audio_url_from_search(self, link_or_file_path: str, cursor):
+        query_string = urllib.parse.urlencode({'search_query': link_or_file_path})
+        async with aiohttp.ClientSession() as session:
+            async with session.get('http://www.youtube.com/results?' + query_string) as response:
+                htm_content = await response.read()
+        search_results = re.findall(r"watch\?v=(\S{11})", htm_content.decode())
+        url = 'http://www.youtube.com/watch?v=' + search_results[0]
+        info_dict = self.ydl.extract_info(url, download=False)
+        audio_url = info_dict['url']
+        cursor.execute("INSERT INTO audio_cache VALUES (?, ?)",
+                       (link_or_file_path, audio_url))
+        self.conn.commit()
+        return audio_url
 
     async def wait_for_audio_finish(self):
         if self.voice_channel and (self.voice_channel.is_playing() or self.voice_channel.is_paused()):
@@ -196,15 +217,24 @@ class MusicPlayer:
 
     async def get_spotify_playlist_tracks(self, playlist_url: str) -> Optional[list[str]]:
         playlist_id = playlist_url.split('/')[-1].split('?')[0]
-        playlist_info = self.sp.playlist_items(playlist_id)
-        tracks = playlist_info['items'] if playlist_info else []
+        offset = 0
         track_urls = []
-        for track in tracks:
-            if track['track'] and track['track']['external_urls'] and 'spotify' in track['track']['external_urls']:
-                track_urls.append(track['track']['external_urls']['spotify'])
+
+        while True:
+            playlist_info = self.sp.playlist_items(playlist_id, offset=offset)
+            tracks = playlist_info['items'] if playlist_info else []
+            for track in tracks:
+                if track['track'] and track['track']['external_urls'] and 'spotify' in track['track']['external_urls']:
+                    track_urls.append(track['track']['external_urls']['spotify'])
+            if playlist_info['next']:
+                offset += 100
+            else:
+                break
+
         return track_urls
 
-    def clean_lyrics(self, lyrics: str) -> str:
+    @staticmethod
+    def clean_lyrics(lyrics: str) -> str:
         lines = lyrics.split('\n')
         cleaned_lines = [line for line in lines if
                          not line.startswith(
@@ -212,7 +242,8 @@ class MusicPlayer:
                              'Lyrics')]
         return '\n'.join(cleaned_lines)
 
-    def extract_artist_and_song_from_title(self, title: str) -> Tuple[Optional[str], Optional[str]]:
+    @staticmethod
+    def extract_artist_and_song_from_title(title: str) -> Tuple[Optional[str], Optional[str]]:
         parts = title.split(' - ', 1)
         if len(parts) == 2:
             artist, song = parts
@@ -235,9 +266,10 @@ class MusicPlayer:
                 return lyrics
         return None
 
-    async def get_youtube_video_title(self, url: str) -> str:
+    @staticmethod
+    async def get_youtube_video_title(url: str) -> str:
         ydl_opts = {'quiet': True}
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=False)
             return info_dict.get('title', None)
 
@@ -253,13 +285,15 @@ class MusicPlayer:
                     song_name = item
                 response += f"{index + 1}. {song_name}\n"
 
-            chunk_size = 2000
-            chunks = [response[i:i + chunk_size] for i in range(0, len(response), chunk_size)]
-            for chunk in chunks:
-                await self.send_message(message, chunk, is_private=False)
+                # If the response is getting close to the Discord character limit, send it and start a new one
+                if len(response) > 1800:
+                    await self.send_message(message, response, is_private=False)
+                    response = ""
+            # Send any remaining songs in the queue
+            if response:
+                await self.send_message(message, response, is_private=False)
         else:
             response = "The queue is empty."
-
             await self.send_message(message, response, is_private=False)
 
     async def start(self):
@@ -298,154 +332,7 @@ class MusicPlayer:
             response = responses.get_response(message, user_message)
             await self.send_message(message, response, is_private=False)
 
-            if user_message.startswith('!music'):
-                song_link = user_message.split(' ', 1)[1].strip() if len(user_message.split(' ', 1)) > 1 else None
-
-                if song_link:
-                    await self.join_voice_channel(message)
-                    if self.voice_channel:
-                        try:
-                            self.queue.append(song_link)
-                            response = 'Song added to the queue!'
-                            if not self.voice_channel.is_playing():
-                                await self.play_next_song()
-                        except Exception as e:
-                            print(f"Error playing audio: {e}")
-                else:
-                    response = 'Please provide a song link or name!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message.startswith('!force'):
-                song_link = user_message.split(' ', 1)[1].strip() if len(user_message.split(' ', 1)) > 1 else None
-
-                if song_link and self.voice_channel:
-                    self.queue.clear()  # Clear the queue
-                    self.voice_channel.stop()
-                    await self.play_audio(song_link)
-                    response = 'Playing the requested song!'
-                else:
-                    response = 'Please provide a song link or join a voice channel!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message.startswith('!reset'):
-                if self.voice_channel:
-                    self.voice_channel.stop()
-                    self.queue.clear()
-                    self.current_audio = None
-                    await self.disconnect_voice_channel()
-
-            elif user_message == '!Qnext':
-                if self.queue and self.voice_channel:
-                    self.voice_channel.stop()
-                    await self.play_next_song()
-                    response = 'Playing the next song from the queue!'
-                else:
-                    response = 'The queue is empty or I am not in a voice channel!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message == '!stop':
-                if self.voice_channel:
-                    if self.voice_channel.is_playing():
-                        self.voice_channel.stop()
-                    await self.disconnect_voice_channel()
-                    response = 'Stopped playing and disconnected from the voice channel!'
-                else:
-                    response = 'I am not in a voice channel!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message == '!pause':
-                if self.voice_channel and self.voice_channel.is_playing():
-                    self.voice_channel.pause()
-                    response = 'Paused the current song!'
-                else:
-                    response = 'No song is currently playing!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message == '!resume':
-                if self.voice_channel and self.voice_channel.is_paused():
-                    self.voice_channel.resume()
-                    response = 'Resumed the current song!'
-                else:
-                    response = 'No song is currently paused!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message == '!np':
-                await self.now_playing(message)
-
-            elif user_message == '!Q':
-                await self.display_queue(message)
-
-            elif user_message == '!loop':
-                if self.voice_channel and self.current_audio:
-                    self.loop = True
-                    response = 'Looping the current song!'
-                else:
-                    response = 'No song is currently playing or I am not in a voice channel!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message == '!loop stop':
-                if self.voice_channel:
-                    self.loop = False
-                    response = 'Stopped looping the current song!'
-                else:
-                    response = 'I am not in a voice channel!'
-
-                await self.send_message(message, response, is_private=False)
-
-            elif user_message.startswith('!lyrics'):
-                if self.current_audio:
-                    song_name = None
-                    if self.current_audio.startswith('https://open.spotify.com/track/'):
-                        song_name = await self.get_spotify_track_name(self.current_audio)
-                    elif self.current_audio.startswith('https://www.youtube.com/watch?v='):
-                        song_name = await self.get_youtube_video_title(self.current_audio)
-
-                    if song_name:
-                        print(f"Fetching lyrics for song: {song_name}")
-                        lyrics = await self.fetch_lyrics_from_genius(song_name)
-                        print(f"Genius API response: {lyrics}")
-                        if lyrics:
-                            chunk_size = 2000
-                            lyrics = lyrics.replace('\r\n', '\n')
-                            lines = lyrics.split('\n')
-                            formatted_lyrics = ''
-                            for line in lines:
-                                formatted_lyrics += f"    {line}\n"
-                            formatted_lyrics = formatted_lyrics.rstrip()
-
-                            chunks = [formatted_lyrics[i:i + chunk_size] for i in
-                                      range(0, len(formatted_lyrics), chunk_size)]
-                            for chunk in chunks:
-                                await self.send_message(message, chunk, is_private=False)
-                        else:
-                            response = 'Lyrics not found.'
-                            await self.send_message(message, response, is_private=False)
-                    else:
-                        response = 'Cannot fetch lyrics for the current song.'
-                        await self.send_message(message, response, is_private=False)
-                else:
-                    response = 'No song is currently playing.'
-                    await self.send_message(message, response, is_private=False)
-
-            elif user_message.startswith('!cc'):
-                if self.voice_channel:
-                    self.voice_channel.stop()
-                    self.queue.clear()
-                    self.current_audio = None
-                    cursor = self.conn.cursor()
-                    cursor.execute("DELETE FROM audio_cache")
-                    self.conn.commit()
-                    response = 'Cleared the audio cache and stopped playing.'
-                else:
-                    response = 'I am not in a voice channel!'
-                await self.send_message(message, response, is_private=False)
+            await self.handle_music_commands(message, user_message)
 
         @client.event
         async def on_voice_state_update(member, before, after):
@@ -455,8 +342,211 @@ class MusicPlayer:
 
         await client.start(TOKEN)
 
+    async def handle_music_commands(self, message, user_message):
+        if user_message.startswith('!music'):
+            await self.handle_music_command(message, user_message)
 
-if __name__ == "__main__":
-    player = MusicPlayer()
-    asyncio.create_task(player.start())
-    asyncio.get_event_loop().run_forever()
+        elif user_message.startswith('!force'):
+            await self.handle_force_command(message, user_message)
+
+        elif user_message.startswith('!reset'):
+            await self.handle_reset_command()
+
+        elif user_message == '!Qnext':
+            await self.handle_qnext_command(message)
+
+        elif user_message == '!stop':
+            await self.handle_stop_command(message)
+
+        elif user_message == '!pause':
+            await self.handle_pause_command(message)
+
+        elif user_message == '!resume':
+            await self.handle_resume_command(message)
+
+        elif user_message == '!np':
+            await self.now_playing(message)
+
+        elif user_message == '!Q':
+            await self.display_queue(message)
+
+        elif user_message == '!loop':
+            await self.handle_loop_command(message)
+
+        elif user_message == '!loop stop':
+            await self.handle_loop_stop_command(message)
+
+        elif user_message.startswith('!lyrics'):
+            await self.handle_lyrics_command(message)
+
+        elif user_message.startswith('!cc'):
+            await self.handle_cc_command(message)
+
+        elif user_message.startswith('!Qforce'):
+            await self.handle_qforce_command(message, user_message)
+
+    async def handle_music_command(self, message, user_message):
+        response = 'Command not recognized.'  # Default value
+        song_link = user_message.split(' ', 1)[1].strip() if len(user_message.split(' ', 1)) > 1 else None
+
+        if song_link:
+            await self.join_voice_channel(message)
+            if self.voice_channel:
+                try:
+                    self.queue.append(song_link)
+                    response = 'Song added to the queue!'
+                    if not self.voice_channel.is_playing():
+                        await self.play_next_song()
+                except Exception as e:
+                    print(f"Error playing audio: {e}")
+        else:
+            response = 'Please provide a song link or name!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_force_command(self, message, user_message):
+        song_link = user_message.split(' ', 1)[1].strip() if len(user_message.split(' ', 1)) > 1 else None
+
+        if song_link and self.voice_channel:
+            self.queue.clear()  # Clear the queue
+            self.voice_channel.stop()
+            await self.play_audio(song_link)
+            response = 'Playing the requested song!'
+        else:
+            response = 'Please provide a song link or join a voice channel!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_reset_command(self):
+        if self.voice_channel:
+            self.voice_channel.stop()
+            self.queue.clear()
+            self.current_audio = None
+            await self.disconnect_voice_channel()
+
+    async def handle_qnext_command(self, message):
+        if self.queue and self.voice_channel:
+            self.voice_channel.stop()
+            await self.play_next_song()
+            response = 'Playing the next song from the queue!'
+        else:
+            response = 'The queue is empty or I am not in a voice channel!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_stop_command(self, message):
+        if self.voice_channel:
+            if self.voice_channel.is_playing():
+                self.voice_channel.stop()
+            await self.disconnect_voice_channel()
+            response = 'Stopped playing and disconnected from the voice channel!'
+        else:
+            response = 'I am not in a voice channel!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_pause_command(self, message):
+        if self.voice_channel and self.voice_channel.is_playing():
+            self.voice_channel.pause()
+            response = 'Paused the current song!'
+        else:
+            response = 'No song is currently playing!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_resume_command(self, message):
+        if self.voice_channel and self.voice_channel.is_paused():
+            self.voice_channel.resume()
+            response = 'Resumed the current song!'
+        else:
+            response = 'No song is currently paused!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_loop_command(self, message):
+        if self.voice_channel and self.current_audio:
+            self.loop = True
+            response = 'Looping the current song!'
+        else:
+            response = 'No song is currently playing or I am not in a voice channel!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_loop_stop_command(self, message):
+        if self.voice_channel:
+            self.loop = False
+            response = 'Stopped looping the current song!'
+        else:
+            response = 'I am not in a voice channel!'
+
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_lyrics_command(self, message):
+        if self.current_audio:
+            song_name = None
+            if self.current_audio.startswith('https://open.spotify.com/track/'):
+                song_name = await self.get_spotify_track_name(self.current_audio)
+            elif self.current_audio.startswith('https://www.youtube.com/watch?v='):
+                song_name = await self.get_youtube_video_title(self.current_audio)
+
+            if song_name:
+                print(f"Fetching lyrics for song: {song_name}")
+                lyrics = await self.fetch_lyrics_from_genius(song_name)
+                print(f"Genius API response: {lyrics}")
+                if lyrics:
+                    chunk_size = 2000
+                    lyrics = lyrics.replace('\r\n', '\n')
+                    lines = lyrics.split('\n')
+                    formatted_lyrics = ''
+                    for line in lines:
+                        formatted_lyrics += f"    {line}\n"
+                    formatted_lyrics = formatted_lyrics.rstrip()
+
+                    chunks = [formatted_lyrics[i:i + chunk_size] for i in
+                              range(0, len(formatted_lyrics), chunk_size)]
+                    for chunk in chunks:
+                        await self.send_message(message, chunk, is_private=False)
+                else:
+                    response = 'Lyrics not found.'
+                    await self.send_message(message, response, is_private=False)
+            else:
+                response = 'Cannot fetch lyrics for the current song.'
+                await self.send_message(message, response, is_private=False)
+        else:
+            response = 'No song is currently playing.'
+            await self.send_message(message, response, is_private=False)
+
+    async def handle_cc_command(self, message):
+        if self.voice_channel:
+            self.voice_channel.stop()
+            self.queue.clear()
+            self.current_audio = None
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM audio_cache")
+            self.conn.commit()
+            response = 'Cleared the audio cache and stopped playing.'
+        else:
+            response = 'I am not in a voice channel!'
+        await self.send_message(message, response, is_private=False)
+
+    async def handle_qforce_command(self, message, user_message):
+        song_position = user_message.split(' ', 1)[1].strip() if len(user_message.split(' ', 1)) > 1 else None
+
+        if song_position and song_position.isdigit() and self.voice_channel:
+            song_position = int(song_position)
+            if 0 < song_position <= len(self.queue):
+                song_link = self.queue.pop(song_position - 1)  # Remove the song from the queue
+                self.voice_channel.stop()  # Stop the current song
+                await self.play_audio(song_link)  # Play the selected song
+                response = f'Playing the song at position {song_position} from the queue!'
+            else:
+                response = f'There is no song at position {song_position} in the queue!'
+        else:
+            response = 'Please provide a valid song position or join a voice channel!'
+
+        await self.send_message(message, response, is_private=False)
+
+
+if __name__ == '__main__':
+    music_player = MusicPlayer()
+    asyncio.run(music_player.start())
