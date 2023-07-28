@@ -13,26 +13,26 @@ def get_response(message: discord.Message, user_message: str) -> str:
         # Empty response if the message doesn't start with "!"
         return ''
 
-    if p_message == '!helpme':
-# Respond with a help message if the user message is '!helpme'
+        if p_message == '!helpme':
         return '''**🤖 OptiMate Bot Commands**
 
     OptiMate is a Discord bot that can play music, recommend games, and more. Here are the commands you can use:
 
     **🎵 Music Commands**
-     `!Music (youtube/spotify link or song name)`: Plays music from the provided YouTube link or adds it to the Queue.
+     `!Music (YouTube/Spotify link or song name)`: Plays music from the provided YouTube link or adds it to the Queue.
      `!Pause`: Pauses the currently playing song.
      `!Resume`: Resumes playback of the paused song.
      `!Stop`: Stops the bot from playing music and makes it leave the voice channel.
      `!Qnext`: Skips to the next song in the queue.
-     `!Force (youtube/spotify link or song name)`: Interrupts the current song and plays the song from the provided link
-     (**Incompatible with playlists!**).
+     `!Force (YouTube/Spotify link or song name)`: Interrupts the current song and plays the specified song.
+     `!Qforce (number) plays the song with the specified number in the queue.
      `!loop`: Loops the song that is currently playing.
      `!loop stop`: Stop looping the song that is currently playing.
-     `!Q`: Shows the songs that are currently in the queue (**Incompatible with playlists**).
+     `!Q`: Shows the songs that are currently in the queue.
      `!np`: Shows the song that is currently playing.
      `!lyrics`: Shows the lyrics of the song that is currently playing.
      `!Reset`: Clears the bots queue and all it's other tasks (**Debug and crash functionality**).
+     `!cc`: Clears the bots cache (**Debug and crash functionality**).
 
     **🎮 Game Commands**
      `!wtp`: Gives a random game recommendation.
@@ -43,7 +43,7 @@ def get_response(message: discord.Message, user_message: str) -> str:
     '''
 
     # Check if the message should be handled by bot.py
-    if p_message.startswith('!music') or p_message == '!stop' or p_message.startswith('!force') or p_message.startswith('!local') or p_message == '!q' or p_message == '!qnext' or p_message == '!pause' or p_message == '!resume' or p_message == '!np' or p_message == '!reset' or p_message == '!loop' or p_message == '!loop stop' or p_message == '!lyrics':
+    if p_message.startswith('!music') or p_message == '!stop' or p_message.startswith('!force') or p_message.startswith('!local') or p_message == '!q' or p_message == '!qnext' or p_message == '!pause' or p_message == '!resume' or p_message == '!np' or p_message == '!reset' or p_message == '!loop' or p_message == '!loop stop' or p_message == '!lyrics'or p_message == '!qforce':
         # No response required for certain specific commands
         return ''
 
