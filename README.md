@@ -73,7 +73,8 @@ The Music Player supports the following commands when used in a Discord server w
      `!Resume`: Resumes playback of the paused song.
      `!Stop`: Stops the bot from playing music and makes it leave the voice channel.
      `!Qnext`: Skips to the next song in the queue.
-     `!Force (YouTube/Spotify link or song name)`: Interrupts the current song and plays the song from the provided link.
+     `!Force (YouTube/Spotify link or song name)`: Interrupts the current song and plays the specified song.
+     `!Qforce (number) plays the song with the specified number in the queue.
      `!loop`: Loops the song that is currently playing.
      `!loop stop`: Stop looping the song that is currently playing.
      `!Q`: Shows the songs that are currently in the queue.
