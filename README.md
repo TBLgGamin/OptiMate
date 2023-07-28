@@ -16,7 +16,7 @@ Wtahc this video to install the FFMpeg audio processor to your systems PATH vari
 In short: 
 - **Download all 4 files**
 - **Create discord bot in discord developers portal**
--**Download FFMpeg to your systems PATH variable**
+- **Download FFMpeg to your systems PATH variable**
 - **Put in keys**
 - **Install neccessary dependecies:** pip install discord.py
 pip install discord.py
